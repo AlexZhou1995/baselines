@@ -1,5 +1,11 @@
 <img src="data/logo.jpg" width=25% align="right" />
 
+# This fork difference from OpenAI Baselines
+
+Currently this fork differs from the OpenAI master branch after [commit 8c90f67](https://github.com/openai/baselines/commit/8c90f67560920224e466d0389ac1bbf46e00773c).  The baselines/deepq/experiments/atari module has enjoy.py and train.py which are both broken by an earlier [commit bb40378](https://github.com/openai/baselines/commit/bb403781182c6e31d3bf5de16f42b0cb0d8421f7).  These files relied on metadata added to the info object by SimpleMonitor, and the commit removes SimpleMonitor and replaces to call to it with another monitor which doesn't add the necessary info fields.  As well, there is some deprecated module removed which was still referenced by these files.
+
+This fork restores SimpleMonitor, adds it to the env, and changes the wrapper calls to current code (away from the deprecated/removed module).
+
 # Baselines
 
 OpenAI Baselines is a set of high-quality implementations of reinforcement learning algorithms.

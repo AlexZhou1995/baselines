@@ -19,12 +19,14 @@ from baselines.common.misc_util import (
     relatively_safe_pickle_dump,
     set_global_seeds,
     RunningAvg,
+    SimpleMonitor,
 )
 from baselines.common.schedules import LinearSchedule, PiecewiseSchedule
 from baselines import bench
-from baselines.common.atari_wrappers_deprecated import wrap_dqn
+#from baselines.common.atari_wrappers_deprecated import wrap_dqn
+from baselines.deepq import wrap_atari_dqn
 from baselines.common.azure_utils import Container
-from .model import model, dueling_model
+from baselines.deepq.experiments.atari.model import model, dueling_model
 
 
 def parse_args():
@@ -63,7 +65,9 @@ def parse_args():
 def make_env(game_name):
     env = gym.make(game_name + "NoFrameskip-v4")
     monitored_env = bench.Monitor(env, logger.get_dir())  # puts rewards and number of steps in info, before environment is wrapped
-    env = wrap_dqn(monitored_env)  # applies a bunch of modification to simplify the observation space (downsample, make b/w)
+    monitored_env = SimpleMonitor(monitored_env)
+    #env = wrap_dqn(monitored_env)  # applies a bunch of modification to simplify the observation space (downsample, make b/w)
+    env = wrap_atari_dqn(monitored_env)  # applies a bunch of modification to simplify the observation space (downsample, make b/w)
     return env, monitored_env
 
 

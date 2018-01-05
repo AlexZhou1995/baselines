@@ -10,11 +10,14 @@ import baselines.common.tf_util as U
 from baselines import deepq
 from baselines.common.misc_util import (
     boolean_flag,
+    SimpleMonitor
 )
 from baselines import bench
-from baselines.common.atari_wrappers_deprecated import wrap_dqn
+#from baselines.common.atari_wrappers_deprecated import wrap_dqn
+from baselines.deepq import wrap_atari_dqn
 from baselines.deepq.experiments.atari.model import model, dueling_model
 
+import matplotlib.pyplot as plt
 
 def parse_args():
     parser = argparse.ArgumentParser("Run an already learned DQN model.")
@@ -24,6 +27,7 @@ def parse_args():
     parser.add_argument("--video", type=str, default=None, help="Path to mp4 file where the video of first episode will be recorded.")
     boolean_flag(parser, "stochastic", default=True, help="whether or not to use stochastic actions according to models eps value")
     boolean_flag(parser, "dueling", default=False, help="whether or not to use dueling model")
+    boolean_flag(parser, "show-observation", default=False, help="whether or not to show an illustration of what the model sees (helps to debug)")
 
     return parser.parse_args()
 
@@ -31,7 +35,8 @@ def parse_args():
 def make_env(game_name):
     env = gym.make(game_name + "NoFrameskip-v4")
     env = bench.Monitor(env, None)
-    env = wrap_dqn(env)
+    env = SimpleMonitor(env)
+    env = wrap_atari_dqn(env)
     return env
 
 
@@ -41,8 +46,15 @@ def play(env, act, stochastic, video_path):
     video_recorder = VideoRecorder(
         env, video_path, enabled=video_path is not None)
     obs = env.reset()
+    if args.show_observation:
+        fig = plt.figure()
+        im = plt.imshow(obs._frames[-1].reshape((84,84)))
+        plt.show(False)
     while True:
         env.unwrapped.render()
+        if args.show_observation:
+            im.set_data(obs._frames[-1].reshape((84,84)))
+            fig.canvas.draw()
         video_recorder.capture_frame()
         action = act(np.array(obs)[None], stochastic=stochastic)[0]
         obs, rew, done, info = env.step(action)
