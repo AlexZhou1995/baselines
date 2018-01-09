@@ -48,7 +48,7 @@ def play(env, act, stochastic, video_path):
     obs = env.reset()
     if args.show_observation:
         fig = plt.figure()
-        im = plt.imshow(obs._frames[-1].reshape((84,84)))
+        im = plt.imshow(obs._frames[-1].reshape((84,84)), cmap='Greys')
         plt.show(False)
     while True:
         env.unwrapped.render()
