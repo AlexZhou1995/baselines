@@ -6,6 +6,10 @@ Currently this fork differs from the OpenAI master branch after [commit 8c90f67]
 
 This fork restores SimpleMonitor, adds it to the env, and changes the wrapper calls to current code (away from the deprecated/removed module).
 
+## Additional changes
+- Updated ACKTR's run_atari.py to save its model when done training, and optionally every X updates during training.  Added ability to resume training if the desired intermediate model is copied to the parent directory of the logger and named "checkpoint_model" (e.g. move checkpoint15000 to /tmp/checkpoint_model and it will resume training there).
+- Added an ACKTR enjoy_atari.py to view the trained model playing its game.  There's an option to display what the model sees (a scaled down grayscale from the actual game) so you can determine if a fault in the model is due to missing information from the scaling/grayscale view it gets.
+
 # Baselines
 
 OpenAI Baselines is a set of high-quality implementations of reinforcement learning algorithms.
