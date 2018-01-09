@@ -1,8 +1,10 @@
 import os.path as osp
+import os
 import time
 import joblib
 import numpy as np
 import tensorflow as tf
+import cloudpickle
 from baselines import logger
 
 from baselines.common import set_global_seeds, explained_variance
@@ -165,8 +167,17 @@ class Runner(object):
         mb_values = mb_values.flatten()
         mb_masks = mb_masks.flatten()
         return mb_obs, mb_states, mb_rewards, mb_masks, mb_actions, mb_values
+    
+def maybe_load_model(save_dir, model):
+    if not save_dir is None:
+        checkpoint_model_path = osp.join(save_dir, 'checkpoint_model')
+        if not osp.exists(checkpoint_model_path):
+            print('no previous model to load')
+            return
+        
+        model.load(checkpoint_model_path)
 
-def learn(policy, env, seed, total_timesteps=int(40e6), gamma=0.99, log_interval=1, nprocs=32, nsteps=20,
+def learn(policy, env, seed, total_timesteps=int(40e6), gamma=0.99, log_interval=10, nprocs=32, nsteps=20,
                  nstack=4, ent_coef=0.01, vf_coef=0.5, vf_fisher_coef=1.0, lr=0.25, max_grad_norm=0.5,
                  kfac_clip=0.001, save_interval=None, lrschedule='linear'):
     tf.reset_default_graph()
@@ -180,11 +191,17 @@ def learn(policy, env, seed, total_timesteps=int(40e6), gamma=0.99, log_interval
                                 vf_fisher_coef, lr=lr, max_grad_norm=max_grad_norm, kfac_clip=kfac_clip,
                                 lrschedule=lrschedule)
     if save_interval and logger.get_dir():
-        import cloudpickle
         with open(osp.join(logger.get_dir(), 'make_model.pkl'), 'wb') as fh:
             fh.write(cloudpickle.dumps(make_model))
     model = make_model()
-
+    
+    # try to load the model from a previous save
+    # This requires the operator to copy a model to the parent
+    # directory of the logging dir (typically /tmp) as "checkpoint_model"
+    if logger.get_dir():
+        logger_parent_dir = osp.abspath(osp.join(logger.get_dir(), os.pardir))
+        maybe_load_model(logger_parent_dir, model)
+        
     runner = Runner(env, model, nsteps=nsteps, nstack=nstack, gamma=gamma)
     nbatch = nenvs*nsteps
     tstart = time.time()
@@ -211,6 +228,13 @@ def learn(policy, env, seed, total_timesteps=int(40e6), gamma=0.99, log_interval
             savepath = osp.join(logger.get_dir(), 'checkpoint%.5i'%update)
             print('Saving to', savepath)
             model.save(savepath)
+            
+    # always save the model when we stop training, if we have a place to save to
+    if logger.get_dir():
+        savepath = osp.join(logger.get_dir(), 'final_model')
+        print('Saving to', savepath)
+        model.save(savepath)
+            
     coord.request_stop()
     coord.join(enqueue_threads)
     env.close()

@@ -8,7 +8,7 @@ from baselines.common.vec_env.subproc_vec_env import SubprocVecEnv
 from baselines.common.atari_wrappers import make_atari, wrap_deepmind
 from baselines.acktr.policies import CnnPolicy
 
-def train(env_id, num_timesteps, seed, num_cpu):
+def train(env_id, num_timesteps, seed, num_cpu, save_interval=None):
     def make_env(rank):
         def _thunk():
             env = make_atari(env_id)
@@ -20,7 +20,7 @@ def train(env_id, num_timesteps, seed, num_cpu):
     set_global_seeds(seed)
     env = SubprocVecEnv([make_env(i) for i in range(num_cpu)])
     policy_fn = CnnPolicy
-    learn(policy_fn, env, seed, total_timesteps=int(num_timesteps * 1.1), nprocs=num_cpu)
+    learn(policy_fn, env, seed, total_timesteps=int(num_timesteps * 1.1), nprocs=num_cpu, save_interval=save_interval)
     env.close()
 
 def main():
@@ -29,9 +29,10 @@ def main():
     parser.add_argument('--env', help='environment ID', default='BreakoutNoFrameskip-v4')
     parser.add_argument('--seed', help='RNG seed', type=int, default=0)
     parser.add_argument('--num-timesteps', type=int, default=int(10e6))
+    parser.add_argument('--save-interval', type=int, default=int(1000))
     args = parser.parse_args()
     logger.configure()
-    train(args.env, num_timesteps=args.num_timesteps, seed=args.seed, num_cpu=32)
+    train(args.env, num_timesteps=args.num_timesteps, seed=args.seed, num_cpu=32, save_interval=args.save_interval)
 
 
 if __name__ == '__main__':
