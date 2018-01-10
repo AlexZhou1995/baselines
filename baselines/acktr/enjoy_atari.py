@@ -6,7 +6,7 @@ import argparse
 from baselines.common.misc_util import (
     boolean_flag,
 )
-
+from gym.monitoring import VideoRecorder
 
 def main():
     args = parse_args()
@@ -34,6 +34,12 @@ def main():
         # setup a gray palette
         pygame.display.set_palette(tuple([(i, i, i) for i in range(256)]))
         
+    # if we're supposed to record video
+    video_path = args.video_path
+    if video_path is not None:
+        video_recorder = VideoRecorder(
+        env, base_path=video_path, enabled=video_path is not None)
+        
     while True:
         obs, done = env.reset(), False
         episode_rew = 0
@@ -46,15 +52,21 @@ def main():
                 scaled_array = np.uint8(np.kron(transposed, np.ones((scale_factor, scale_factor))))
                 surfarray.blit_array(screen, scaled_array)
                 pygame.display.flip()
+            if video_path is not None:
+                video_recorder.capture_frame()
             # add the current observation onto our history list
             obs_history = np.roll(obs_history, shift=-1, axis=3)
             obs_history[:, :, :, -1] = obs[None][:, :, :, 0]
             # get the suggested action for the current observation history
             action, v, _ = model.step(obs_history)
             
-            obs, rew, done, _ = env.step(action)
+            obs, rew, done, info = env.step(action)
             episode_rew += rew
         print("Episode reward", episode_rew)
+        # if we're taking video, stop it now and clear video path so no more frames are added if we're out of lives or there are no lives in this game
+        if video_path is not None and ('ale.lives' not in info or info['ale.lives'] == 0):
+            video_path = None
+            video_recorder.close()
 
 def parse_args():
     parser = argparse.ArgumentParser("Enjoy model results for Atari games")
@@ -65,6 +77,7 @@ def parse_args():
     # other config
     boolean_flag(parser, "show-observation", default=False, help="whether or not to show an illustration of what the model sees (helps to debug)")
     parser.add_argument("--scale-factor", type=int, default=2, help="only used when show-observation is set, scales up display size of observation")
+    parser.add_argument("--video-path", type=str, default=None, help="supply to record video (e.g. /tmp/breakout will create /tmp/breakout.mp4)")
     return parser.parse_args()
 
 if __name__ == '__main__':
