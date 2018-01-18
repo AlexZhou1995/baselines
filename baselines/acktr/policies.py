@@ -38,6 +38,39 @@ class CnnPolicy(object):
         self.value = value
 
 
+class FcnPolicy(object):
+
+    def __init__(self, sess, ob_space, ac_space, nenv, nsteps, nstack, reuse=False):
+        nbatch = nenv*nsteps
+        ob_dim = ob_space.shape[0]
+        ob_shape = (nbatch, ob_dim*nstack)
+        nact = ac_space.n
+        X = tf.placeholder(tf.float32, ob_shape) #obs
+        with tf.variable_scope("model", reuse=reuse):
+            h = fc(X, 'fc1', nh=256, init_scale=np.sqrt(2))
+            h2 = fc(h, 'fc2', nh=256, init_scale=np.sqrt(2))
+            #h3 = fc(h2, 'fc3', nh=256, init_scale=np.sqrt(2))
+            h4 = fc(h2, 'fc4', nh=256, init_scale=np.sqrt(2))
+            pi = fc(h4, 'pi', nact, act=lambda x:x)
+            vf = fc(h4, 'v', 1, act=lambda x:x)
+
+        v0 = vf[:, 0]
+        a0 = sample(pi)
+        self.initial_state = [] #not stateful
+
+        def step(ob, *_args, **_kwargs):
+            a, v = sess.run([a0, v0], {X:ob})
+            return a, v, [] #dummy state
+
+        def value(ob, *_args, **_kwargs):
+            return sess.run(v0, {X:ob})
+
+        self.X = X
+        self.pi = pi
+        self.vf = vf
+        self.step = step
+        self.value = value
+
 class GaussianMlpPolicy(object):
     def __init__(self, ob_dim, ac_dim):
         # Here we'll construct a bunch of expressions, which will be used in two places:

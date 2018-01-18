@@ -5,6 +5,7 @@ import joblib
 import numpy as np
 import tensorflow as tf
 import cloudpickle
+import gym
 from baselines import logger
 
 from baselines.common import set_global_seeds, explained_variance
@@ -111,10 +112,11 @@ class Runner(object):
     def __init__(self, env, model, nsteps, nstack, gamma):
         self.env = env
         self.model = model
-        nh, nw, nc = env.observation_space.shape
+        feature_count = env.observation_space.shape[0]
         nenv = env.num_envs
-        self.batch_ob_shape = (nenv*nsteps, nh, nw, nc*nstack)
-        self.obs = np.zeros((nenv, nh, nw, nc*nstack), dtype=np.uint8)
+        self.batch_ob_shape = (nenv*nsteps, feature_count*nstack)
+        self.obs = np.zeros((nenv, feature_count*nstack), dtype=np.float32)
+        self.feature_count = feature_count
         obs = env.reset()
         self.update_obs(obs)
         self.gamma = gamma
@@ -123,8 +125,8 @@ class Runner(object):
         self.dones = [False for _ in range(nenv)]
 
     def update_obs(self, obs):
-        self.obs = np.roll(self.obs, shift=-1, axis=3)
-        self.obs[:, :, :, -1] = obs[:, :, :, 0]
+        self.obs = np.roll(self.obs, shift=-self.feature_count, axis=self.obs.ndim-1)
+        self.obs[..., -self.feature_count:] = obs
 
     def run(self):
         mb_obs, mb_rewards, mb_actions, mb_values, mb_dones = [],[],[],[],[]
@@ -145,7 +147,7 @@ class Runner(object):
             mb_rewards.append(rewards)
         mb_dones.append(self.dones)
         #batch of steps to batch of rollouts
-        mb_obs = np.asarray(mb_obs, dtype=np.uint8).swapaxes(1, 0).reshape(self.batch_ob_shape)
+        mb_obs = np.asarray(mb_obs, dtype=np.float32).swapaxes(1, 0).reshape(self.batch_ob_shape)
         mb_rewards = np.asarray(mb_rewards, dtype=np.float32).swapaxes(1, 0)
         mb_actions = np.asarray(mb_actions, dtype=np.int32).swapaxes(1, 0)
         mb_values = np.asarray(mb_values, dtype=np.float32).swapaxes(1, 0)
@@ -179,7 +181,7 @@ def maybe_load_model(save_dir, model):
 
 def learn(policy, env, seed, total_timesteps=int(40e6), gamma=0.99, log_interval=10, nprocs=32, nsteps=20,
                  nstack=4, ent_coef=0.01, vf_coef=0.5, vf_fisher_coef=1.0, lr=0.25, max_grad_norm=0.5,
-                 kfac_clip=0.001, save_interval=None, lrschedule='linear'):
+                 kfac_clip=0.001, save_interval=None, lrschedule='linear', animate_interval=None, env_id=None):
     tf.reset_default_graph()
     set_global_seeds(seed)
 
@@ -224,10 +226,35 @@ def learn(policy, env, seed, total_timesteps=int(40e6), gamma=0.99, log_interval
             logger.record_tabular("explained_variance", float(ev))
             logger.dump_tabular()
 
+        # are we supposed to save?
         if save_interval and (update % save_interval == 0 or update == 1) and logger.get_dir():
             savepath = osp.join(logger.get_dir(), 'checkpoint%.5i'%update)
             print('Saving to', savepath)
             model.save(savepath)
+            
+        # animate every so often if requested
+        if animate_interval and (update % animate_interval == 0 or update==1) and env_id is not None:
+            test_env = gym.make(env_id)
+            test_env.seed(update)
+            feature_count = ob_space.shape[0]
+            # setup history for same number of environments, for the given feature count and history stack size
+            # this is because we need to feed the same shape tensors into the step model, but we'll only use the first env
+            obs_history = np.zeros((nenvs, feature_count*nstack), dtype=np.float32)
+            obs, done = test_env.reset(), False
+            episode_rew = 0
+            while not done:
+                test_env.render()
+                # add the current observation onto our history list
+                obs_history[0] = np.roll(obs_history[0], shift=-feature_count, axis=obs_history[0].ndim-1)
+                obs_history[0][..., -feature_count:] = obs
+                # get the suggested action for the current observation history
+                action, v, _ = model.step(obs_history)
+                # the model returns an action for each env, but we're only using the first one to animate
+                obs, rew, done, info = test_env.step(action[0])
+                episode_rew += rew
+            print("Episode reward", episode_rew)
+            test_env.close()
+            
             
     # always save the model when we stop training, if we have a place to save to
     if logger.get_dir():
