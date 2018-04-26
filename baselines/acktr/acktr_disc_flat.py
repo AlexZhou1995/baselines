@@ -181,7 +181,8 @@ def maybe_load_model(save_dir, model):
 
 def learn(policy, env, seed, total_timesteps=int(40e6), gamma=0.99, log_interval=10, nprocs=32, nsteps=20,
                  nstack=4, ent_coef=0.01, vf_coef=0.5, vf_fisher_coef=1.0, lr=0.25, max_grad_norm=0.5,
-                 kfac_clip=0.001, save_interval=None, lrschedule='linear', animate_interval=None, env_id=None):
+                 kfac_clip=0.001, save_interval=None, lrschedule='linear', animate_interval=None, 
+                 end_render_interval=None, env_id=None):
     tf.reset_default_graph()
     set_global_seeds(seed)
 
@@ -252,6 +253,30 @@ def learn(policy, env, seed, total_timesteps=int(40e6), gamma=0.99, log_interval
                 # the model returns an action for each env, but we're only using the first one to animate
                 obs, rew, done, info = test_env.step(action[0])
                 episode_rew += rew
+            print("Episode reward", episode_rew)
+            test_env.close()
+            
+        # in some cases, it's helpful to just do a render of the end result when done every so often if requested
+        if end_render_interval and (update % end_render_interval == 0 or update==1) and env_id is not None:
+            test_env = gym.make(env_id)
+            test_env.seed(update)
+            feature_count = ob_space.shape[0]
+            # setup history for same number of environments, for the given feature count and history stack size
+            # this is because we need to feed the same shape tensors into the step model, but we'll only use the first env
+            obs_history = np.zeros((nenvs, feature_count*nstack), dtype=np.float32)
+            obs, done = test_env.reset(), False
+            episode_rew = 0
+            while not done:
+                # add the current observation onto our history list
+                obs_history[0] = np.roll(obs_history[0], shift=-feature_count, axis=obs_history[0].ndim-1)
+                obs_history[0][..., -feature_count:] = obs
+                # get the suggested action for the current observation history
+                action, v, _ = model.step(obs_history)
+                # the model returns an action for each env, but we're only using the first one to animate
+                obs, rew, done, info = test_env.step(action[0])
+                episode_rew += rew
+            # now that the environment processing is done, render the result
+            test_env.render()
             print("Episode reward", episode_rew)
             test_env.close()
             
